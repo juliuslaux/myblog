@@ -78,10 +78,33 @@ app.get('/health', (req, res) => {
 
 app.get('/', async (req, res) => {
     try {
-        res.render('index', { posts: [], user: null });
+        // Generate debug info
+        const debug = {
+            sessionID: req.sessionID || 'no-session',
+            authenticated: req.isAuthenticated(),
+            user: req.user ? req.user.username : 'none'
+        };
+        
+        res.render('index', { 
+            posts: [], 
+            user: req.user,
+            isAuthenticated: req.isAuthenticated(),
+            debug: debug
+        });
     } catch (error) {
         console.error('Error:', error);
-        res.status(500).json({ error: 'Internal Server Error' });
+        const debug = {
+            sessionID: req.sessionID || 'no-session',
+            authenticated: false,
+            user: 'none'
+        };
+        res.status(500).render('404', { 
+            message: 'Error loading home page', 
+            posts: [],
+            user: null,
+            isAuthenticated: false,
+            debug: debug
+        });
     }
 });
 

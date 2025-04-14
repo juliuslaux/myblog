@@ -25,14 +25,10 @@ const connectToDatabase = async () => {
 
     try {
         const mongoOptions = {
-            useNewUrlParser: true,
-            useUnifiedTopology: true,
-            serverSelectionTimeoutMS: 10000, // Increase timeout
+            serverSelectionTimeoutMS: 10000,
             socketTimeoutMS: 10000,
             connectTimeoutMS: 10000,
             maxPoolSize: 10,
-            retryWrites: true,
-            w: 'majority',
             family: 4 // Force IPv4
         };
 

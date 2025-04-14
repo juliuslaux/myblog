@@ -13,20 +13,34 @@ router.get('/login', (req, res) => {
 // Login handler
 router.post('/login', (req, res, next) => {
     console.log('Login attempt:', req.body.username);
+    
+    // Check if credentials are provided
+    if (!req.body.username || !req.body.password) {
+        console.log('Missing credentials');
+        return res.render('login', { error: 'Username and password are required' });
+    }
+    
     passport.authenticate('local', (err, user, info) => {
         if (err) {
-            console.error('Authentication error:', err);
-            return next(err);
+            console.error('Authentication error details:', err.message, err.stack);
+            return res.render('login', { 
+                error: 'Authentication error: ' + (process.env.NODE_ENV === 'development' ? err.message : 'Please try again later')
+            });
         }
+        
         if (!user) {
-            console.log('Authentication failed:', info.message);
-            return res.render('login', { error: info.message });
+            console.log('Authentication failed:', info && info.message);
+            return res.render('login', { error: info && info.message ? info.message : 'Invalid username or password' });
         }
+        
         req.logIn(user, (err) => {
             if (err) {
-                console.error('Login error:', err);
-                return next(err);
+                console.error('Login error details:', err.message, err.stack);
+                return res.render('login', { 
+                    error: 'Login error: ' + (process.env.NODE_ENV === 'development' ? err.message : 'Please try again later')
+                });
             }
+            
             console.log('Login successful, redirecting to home');
             return res.redirect('/');
         });

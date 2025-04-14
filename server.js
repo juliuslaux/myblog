@@ -9,7 +9,30 @@ const LocalStrategy = require('passport-local').Strategy;
 const User = require('./models/User');
 const bcrypt = require('bcrypt');
 
-const port = process.env.PORT || 3000;
+// MongoDB connection with faster timeout
+let isConnected = false;
+const connectToDatabase = async () => {
+    if (isConnected) {
+        return;
+    }
+
+    try {
+        await mongoose.connect(process.env.MONGODB_URI, {
+            useNewUrlParser: true,
+            useUnifiedTopology: true,
+            serverSelectionTimeoutMS: 3000, // Reduce timeout
+            socketTimeoutMS: 3000,
+            connectTimeoutMS: 3000,
+            maxPoolSize: 10
+        });
+        isConnected = true;
+        console.log('Connected to MongoDB');
+    } catch (error) {
+        console.error('MongoDB connection error:', error);
+        isConnected = false;
+        throw error;
+    }
+};
 
 // Set up view engine
 app.set('view engine', 'ejs');
@@ -17,11 +40,16 @@ app.set('views', path.join(__dirname, 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.urlencoded({ extended: true }));
 
-// Session configuration
+// Session configuration optimized for serverless
 app.use(session({
-    secret: process.env.SESSION_SECRET || 'your-secret-key',
+    secret: process.env.SESSION_SECRET,
     resave: false,
-    saveUninitialized: false
+    saveUninitialized: false,
+    cookie: {
+        maxAge: 24 * 60 * 60 * 1000, // 24 hours
+        secure: process.env.NODE_ENV === 'production',
+        httpOnly: true
+    }
 }));
 
 // Passport configuration
@@ -31,7 +59,8 @@ app.use(passport.session());
 passport.use(new LocalStrategy(
     async (username, password, done) => {
         try {
-            const user = await User.findOne({ username });
+            await connectToDatabase();
+            const user = await User.findOne({ username }).maxTimeMS(2000);
             if (!user) {
                 return done(null, false, { message: 'Incorrect username.' });
             }
@@ -54,7 +83,8 @@ passport.serializeUser((user, done) => {
 
 passport.deserializeUser(async (id, done) => {
     try {
-        const user = await User.findById(id);
+        await connectToDatabase();
+        const user = await User.findById(id).maxTimeMS(2000);
         done(null, user);
     } catch (err) {
         done(err);
@@ -62,19 +92,34 @@ passport.deserializeUser(async (id, done) => {
 });
 
 // Add this after passport configuration but before routes
-app.use((req, res, next) => {
-    res.locals.user = req.user;  // Make user available in all views
-    next();
+app.use(async (req, res, next) => {
+    try {
+        await connectToDatabase();
+        res.locals.user = req.user;
+        next();
+    } catch (error) {
+        next(error);
+    }
 });
 
-// Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI)
-    .then(() => console.log('Connected to MongoDB'))
-    .catch((err) => console.error('Failed to connect to MongoDB', err));
+// Basic route for quick testing
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'ok' });
+});
 
 // Import routes
 const blogRoutes = require('./routes/blogRoutes');
 const authRoutes = require('./routes/authRoutes');
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+    console.error('Error:', err);
+    res.status(500).json({ 
+        error: 'Internal Server Error',
+        message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
+    });
+});
+
 app.use('/', authRoutes);
 app.use('/', blogRoutes);
 
@@ -83,6 +128,12 @@ app.use((req, res) => {
     res.status(404).render('404', { message: 'Post or Page not found', posts: [] });
 });
 
-app.listen(port, () => {
-    console.log(`Blog server running at http://localhost:${port}`);
-});
+// Only start the server if we're not in a serverless environment
+if (process.env.NODE_ENV !== 'production') {
+    const port = process.env.PORT || 3000;
+    app.listen(port, () => {
+        console.log(`Blog server running at http://localhost:${port}`);
+    });
+}
+
+module.exports = app;

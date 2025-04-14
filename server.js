@@ -85,21 +85,28 @@ app.get('/', async (req, res) => {
     }
 });
 
-// Session configuration
+// Session configuration for Vercel
 const sessionConfig = {
     secret: process.env.SESSION_SECRET,
-    resave: false,
-    saveUninitialized: false,
+    resave: true,
+    saveUninitialized: true,
     cookie: {
-        maxAge: 24 * 60 * 60 * 1000,
-        secure: process.env.NODE_ENV === 'production',
+        maxAge: 24 * 60 * 60 * 1000, // 24 hours
+        secure: false, // Set to false even in production for Vercel
         httpOnly: true
     }
 };
 
+// Apply middleware
 app.use(session(sessionConfig));
 app.use(passport.initialize());
 app.use(passport.session());
+
+// Force session save on every request to ensure it's stored
+app.use((req, res, next) => {
+    req.session.touch();
+    next();
+});
 
 // Passport configuration
 passport.use(new LocalStrategy(
@@ -119,18 +126,52 @@ passport.use(new LocalStrategy(
     }
 ));
 
+// Force session to be saved to store on login
 passport.serializeUser((user, done) => {
-    done(null, user.id);
+    console.log('Serializing user:', user.id);
+    if (user && user.id) {
+        return done(null, user.id);
+    } else {
+        return done(new Error('User serialization failed - invalid user object'));
+    }
 });
 
 passport.deserializeUser(async (id, done) => {
     try {
+        console.log('Deserializing user ID:', id);
         await connectToDatabase();
-        const user = await User.findById(id).maxTimeMS(2000);
-        done(null, user);
+        const user = await User.findById(id).maxTimeMS(5000);
+        if (!user) {
+            console.log('User not found for ID:', id);
+            return done(null, false);
+        }
+        console.log('User found:', user.username);
+        return done(null, user);
     } catch (err) {
-        done(err);
+        console.error('Error deserializing user:', err);
+        return done(err);
     }
+});
+
+// Add this after passport configuration but before routes
+app.use((req, res, next) => {
+    // Always log auth status
+    console.log('Auth middleware - Session ID:', req.sessionID);
+    console.log('Auth middleware - isAuthenticated:', req.isAuthenticated());
+    console.log('Auth middleware - User:', req.user ? req.user.username : 'none');
+    
+    // Store authentication in res.locals for all templates
+    res.locals.isAuthenticated = req.isAuthenticated();
+    res.locals.currentUser = req.user;
+    
+    // For debugging, add to res.locals
+    res.locals.debug = {
+        sessionID: req.sessionID,
+        authenticated: req.isAuthenticated(),
+        user: req.user ? req.user.username : 'none'
+    };
+    
+    next();
 });
 
 // Error handling middleware

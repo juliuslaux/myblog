@@ -41,16 +41,29 @@ router.post('/login', (req, res, next) => {
                 });
             }
             
-            console.log('Login successful, redirecting to home');
-            return res.redirect('/');
+            console.log('Login successful for:', user.username);
+            console.log('Session ID after login:', req.sessionID);
+            
+            // Save session explicitly to make sure it persists
+            req.session.save((err) => {
+                if (err) {
+                    console.error('Session save error:', err);
+                }
+                console.log('Session saved, redirecting to home');
+                
+                // Redirect to home page
+                return res.redirect('/');
+            });
         });
     })(req, res, next);
 });
 
 // Logout handler
-router.get('/logout', (req, res) => {
-    req.logout();
-    res.redirect('/');
+router.get('/logout', (req, res, next) => {
+    req.logout(function(err) {
+        if (err) { return next(err); }
+        res.redirect('/');
+    });
 });
 
 // Password update page

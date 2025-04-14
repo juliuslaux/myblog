@@ -16,16 +16,28 @@ function generateSlug(text) {
 // Routes 123
 router.get('/', async (req, res) => {
     try {
+        // Debug authentication status
+        console.log('/ route - Auth status:', req.isAuthenticated(), req.user ? req.user.username : 'no user');
+
         const posts = await Blog.find().sort({ date: -1 });
-        res.render('index', { posts, user: req.user });
+        res.render('index', { 
+            posts, 
+            user: req.user,
+            isAuthenticated: req.isAuthenticated()
+        });
     } catch (err) {
         console.error('Error fetching posts:', err);
-        res.status(500).render('404', { message: 'Error fetching posts', posts: [], user: req.user });
+        res.status(500).render('404', { 
+            message: 'Error fetching posts', 
+            posts: [], 
+            user: req.user,
+            isAuthenticated: req.isAuthenticated()
+        });
     }
 });
 
 router.get('/create', isAuthenticated, (req, res) => {
-    res.render('create', { user: req.user });
+    res.render('create', { title: 'Create Post' });
 });
 
 router.post('/create', isAuthenticated, async (req, res) => {
@@ -44,7 +56,11 @@ router.post('/create', isAuthenticated, async (req, res) => {
         res.redirect('/');
     } catch (err) {
         console.error('Error creating post:', err);
-        res.status(500).render('404', { message: 'Error creating post', posts: [], user: req.user });
+        res.status(500).render('404', { 
+            message: 'Error creating post', 
+            posts: [], 
+            title: 'Error'
+        });
     }
 });
 
@@ -53,13 +69,21 @@ router.get('/blog/:slug', async (req, res) => {
         const post = await Blog.findOne({ slug: req.params.slug });
         if (post) {
             const posts = await Blog.find();
-            res.render('post', { post, posts, user: req.user });
+            res.render('post', { post, posts, title: post.title });
         } else {
-            res.status(404).render('404', { message: 'Post not found', posts: [], user: req.user });
+            res.status(404).render('404', { 
+                message: 'Post not found', 
+                posts: [], 
+                title: 'Not Found'
+            });
         }
     } catch (err) {
         console.error('Error fetching post:', err);
-        res.status(500).render('404', { message: 'Error fetching post', posts: [], user: req.user });
+        res.status(500).render('404', { 
+            message: 'Error fetching post',
+            posts: [],
+            title: 'Error'
+        });
     }
 });
 

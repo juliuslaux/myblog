@@ -10,7 +10,13 @@
     <header>
         <div class="header-left">
             <h1>Julius Laux</h1>
-            <% if (user) { %>
+            <!-- Debug info (temporarily) -->
+            <div style="font-size: 12px; color: #666;">
+                Auth status: <%= debug.authenticated ? 'Authenticated' : 'Not authenticated' %> | 
+                User: <%= debug.user %> | 
+                Session: <%= debug.sessionID.substring(0, 8) %>...
+            </div>
+            <% if (isAuthenticated) { %>
                 <a href="/create" class="create-post-btn">Create Post</a>
             <% } else { %>
                 <a href="/login" class="create-post-btn">Login</a>

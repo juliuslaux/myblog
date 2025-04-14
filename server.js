@@ -9,6 +9,13 @@ const LocalStrategy = require('passport-local').Strategy;
 const User = require('./models/User');
 const bcrypt = require('bcrypt');
 
+// Optimized for Vercel deployment - Fixed MongoDB connection
+
+// Quick response route for testing
+app.get('/api/test', (req, res) => {
+    res.json({ status: 'ok', message: 'API is responding' });
+});
+
 // MongoDB connection with faster timeout
 let isConnected = false;
 const connectToDatabase = async () => {
@@ -17,19 +24,46 @@ const connectToDatabase = async () => {
     }
 
     try {
-        await mongoose.connect(process.env.MONGODB_URI, {
+        const mongoOptions = {
             useNewUrlParser: true,
             useUnifiedTopology: true,
-            serverSelectionTimeoutMS: 3000, // Reduce timeout
-            socketTimeoutMS: 3000,
-            connectTimeoutMS: 3000,
-            maxPoolSize: 10
-        });
+            serverSelectionTimeoutMS: 10000, // Increase timeout
+            socketTimeoutMS: 10000,
+            connectTimeoutMS: 10000,
+            maxPoolSize: 10,
+            retryWrites: true,
+            w: 'majority',
+            family: 4 // Force IPv4
+        };
+
+        console.log('Connecting to MongoDB...');
+        const conn = await mongoose.connect(process.env.MONGODB_URI, mongoOptions);
+        
+        // Test the connection
+        await conn.connection.db.admin().ping();
+        
         isConnected = true;
-        console.log('Connected to MongoDB');
+        console.log('Successfully connected to MongoDB');
+        
+        // Handle disconnection events
+        mongoose.connection.on('disconnected', () => {
+            console.log('Lost MongoDB connection...');
+            isConnected = false;
+        });
+        
+        mongoose.connection.on('error', (err) => {
+            console.error('MongoDB connection error:', err);
+            isConnected = false;
+        });
+
     } catch (error) {
         console.error('MongoDB connection error:', error);
         isConnected = false;
+        // Log more details about the error
+        if (error.name === 'MongoServerSelectionError') {
+            console.error('Could not connect to any MongoDB servers');
+            console.error('Connection string:', process.env.MONGODB_URI.replace(/\/\/[^:]+:[^@]+@/, '//***:***@'));
+        }
         throw error;
     }
 };
@@ -39,36 +73,48 @@ app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
 
-// Session configuration optimized for serverless
-app.use(session({
+// Basic routes that don't require DB
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'ok' });
+});
+
+app.get('/', async (req, res) => {
+    try {
+        res.render('index', { posts: [], user: null });
+    } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+// Session configuration
+const sessionConfig = {
     secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
     cookie: {
-        maxAge: 24 * 60 * 60 * 1000, // 24 hours
+        maxAge: 24 * 60 * 60 * 1000,
         secure: process.env.NODE_ENV === 'production',
         httpOnly: true
     }
-}));
+};
 
-// Passport configuration
+app.use(session(sessionConfig));
 app.use(passport.initialize());
 app.use(passport.session());
 
+// Passport configuration
 passport.use(new LocalStrategy(
     async (username, password, done) => {
         try {
             await connectToDatabase();
             const user = await User.findOne({ username }).maxTimeMS(2000);
-            if (!user) {
-                return done(null, false, { message: 'Incorrect username.' });
-            }
+            if (!user) return done(null, false, { message: 'Incorrect username.' });
             
             const isValid = await bcrypt.compare(password, user.password);
-            if (!isValid) {
-                return done(null, false, { message: 'Incorrect password.' });
-            }
+            if (!isValid) return done(null, false, { message: 'Incorrect password.' });
             
             return done(null, user);
         } catch (err) {
@@ -91,26 +137,6 @@ passport.deserializeUser(async (id, done) => {
     }
 });
 
-// Add this after passport configuration but before routes
-app.use(async (req, res, next) => {
-    try {
-        await connectToDatabase();
-        res.locals.user = req.user;
-        next();
-    } catch (error) {
-        next(error);
-    }
-});
-
-// Basic route for quick testing
-app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'ok' });
-});
-
-// Import routes
-const blogRoutes = require('./routes/blogRoutes');
-const authRoutes = require('./routes/authRoutes');
-
 // Error handling middleware
 app.use((err, req, res, next) => {
     console.error('Error:', err);
@@ -120,12 +146,16 @@ app.use((err, req, res, next) => {
     });
 });
 
+// Import and use routes
+const blogRoutes = require('./routes/blogRoutes');
+const authRoutes = require('./routes/authRoutes');
+
 app.use('/', authRoutes);
 app.use('/', blogRoutes);
 
 // 404 handler
 app.use((req, res) => {
-    res.status(404).render('404', { message: 'Post or Page not found', posts: [] });
+    res.status(404).json({ error: 'Not Found' });
 });
 
 // Only start the server if we're not in a serverless environment

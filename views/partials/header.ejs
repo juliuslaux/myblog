@@ -5,32 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="/css/styles.css">
     <title><%= title %></title>
-</head>
-<body>
-    <header>
-        <div class="header-left">
-            <h1>Julius Laux</h1>
-        </div>
-        <nav>
-            <ul>
-                <li><a href="/">Home</a></li>
-                <li><a href="/about">About</a></li>
-                <li><a href="/contact">Contact</a></li>
-                <% if (typeof user !== 'undefined' && user) { %>
-                    <li><a href="/create">Create Post</a></li>
-                    <li class="dropdown">
-                        <a href="#">Settings</a>
-                        <ul class="dropdown-content">
-                            <li><a href="/update-password">Update Password</a></li>
-                        </ul>
-                    </li>
-                    <li><a href="/logout">Logout</a></li>
-                <% } else { %>
-                    <li><a href="/login">Login</a></li>
-                <% } %>
-            </ul>
-        </nav>
-    </header>
     <style>
         .dropdown {
             position: relative;
@@ -61,5 +35,29 @@
             background-color: #f1f1f1;
         }
     </style>
-</body>
-</html> 
+</head>
+<body>
+    <header>
+        <div class="header-left">
+            <h1>Julius Laux</h1>
+        </div>
+        <nav>
+            <ul>
+                <li><a href="/">Home</a></li>
+                <li><a href="/about">About</a></li>
+                <li><a href="/contact">Contact</a></li>
+                <% if (typeof user !== 'undefined' && user) { %>
+                    <li><a href="/create">Create Post</a></li>
+                    <li class="dropdown">
+                        <a href="#">Settings</a>
+                        <ul class="dropdown-content">
+                            <li><a href="/update-password">Update Password</a></li>
+                        </ul>
+                    </li>
+                    <li><a href="/logout">Logout</a></li>
+                <% } else { %>
+                    <li><a href="/login">Login</a></li>
+                <% } %>
+            </ul>
+        </nav>
+    </header>

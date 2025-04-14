@@ -10,7 +10,11 @@
     <header>
         <div class="header-left">
             <h1>Julius Laux</h1>
-            <a href="/create" class="create-post-btn">Create Post</a>
+            <% if (user) { %>
+                <a href="/create" class="create-post-btn">Create Post</a>
+            <% } else { %>
+                <a href="/login" class="create-post-btn">Login</a>
+            <% } %>
         </div>
     </header>
     

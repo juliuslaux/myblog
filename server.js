@@ -1,110 +1,84 @@
 const express = require('express');
 const app = express();
 const path = require('path');
-const port = process.env.PORT || 3000;
 const mongoose = require('mongoose');
-const blogschema = new mongoose.Schema({
-    title: String,
-    slug: String,
-    content: String,
-    date: String
-});
+require('dotenv').config();
+const session = require('express-session');
+const passport = require('passport');
+const LocalStrategy = require('passport-local').Strategy;
+const User = require('./models/User');
+const bcrypt = require('bcrypt');
 
-const Blog = mongoose.model('Blog', blogschema);
+const port = process.env.PORT || 3000;
+
+// Set up view engine
 app.set('view engine', 'ejs');
-app.set('views', __dirname);
+app.set('views', path.join(__dirname, 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.urlencoded({ extended: true }));
 
-mongoose.connect('mongodb://localhost:27017/blog')
+// Session configuration
+app.use(session({
+    secret: process.env.SESSION_SECRET || 'your-secret-key',
+    resave: false,
+    saveUninitialized: false
+}));
+
+// Passport configuration
+app.use(passport.initialize());
+app.use(passport.session());
+
+passport.use(new LocalStrategy(
+    async (username, password, done) => {
+        try {
+            const user = await User.findOne({ username });
+            if (!user) {
+                return done(null, false, { message: 'Incorrect username.' });
+            }
+            
+            const isValid = await bcrypt.compare(password, user.password);
+            if (!isValid) {
+                return done(null, false, { message: 'Incorrect password.' });
+            }
+            
+            return done(null, user);
+        } catch (err) {
+            return done(err);
+        }
+    }
+));
+
+passport.serializeUser((user, done) => {
+    done(null, user.id);
+});
+
+passport.deserializeUser(async (id, done) => {
+    try {
+        const user = await User.findById(id);
+        done(null, user);
+    } catch (err) {
+        done(err);
+    }
+});
+
+// Add this after passport configuration but before routes
+app.use((req, res, next) => {
+    res.locals.user = req.user;  // Make user available in all views
+    next();
+});
+
+// Connect to MongoDB
+mongoose.connect(process.env.MONGODB_URI)
     .then(() => console.log('Connected to MongoDB'))
     .catch((err) => console.error('Failed to connect to MongoDB', err));
 
-function generateSlug(text) {
-    return text
-        .toLowerCase()
-        .replace(/[^\w\s-]/g, '')
-        .replace(/\s+/g, '-')
-        .replace(/-+/g, '-')
-        .trim();
-}
+// Import routes
+const blogRoutes = require('./routes/blogRoutes');
+const authRoutes = require('./routes/authRoutes');
+app.use('/', authRoutes);
+app.use('/', blogRoutes);
 
-app.get('/', async (req, res) => {
-    try {
-        const posts = await Blog.find().sort({ date: -1 });
-        res.render('index', { posts });
-    } catch (err) {
-        console.error('Error fetching posts:', err);
-        res.status(500).render('404', { message: 'Error fetching posts', posts: [] });
-    }
-});
-
-app.get('/create', (req, res) => {
-    res.render('create');
-});
-
-app.post('/create', async (req, res) => {
-    try {
-        const { title, content } = req.body;
-        const slug = generateSlug(title);
-        
-        const newPost = new Blog({
-            title,
-            slug,
-            content,
-            date: new Date().toLocaleDateString()
-        });
-        
-        await newPost.save();
-        res.redirect('/');
-    } catch (err) {
-        console.error('Error creating post:', err);
-        res.status(500).render('404', { message: 'Error creating post', posts: [] });
-    }
-});
-
-app.get('/blog/:slug', async (req, res) => {
-    try {
-        const post = await Blog.findOne({ slug: req.params.slug });
-        if (post) {
-            const posts = await Blog.find();
-            res.render('post', { post, posts });
-        } else {
-            res.status(404).render('404', { message: 'Post not found', posts: [] });
-        }
-    } catch (err) {
-        console.error('Error fetching post:', err);
-        res.status(500).render('404', { message: 'Error fetching post', posts: [] });
-    }
-});
-
-app.post('/blog/:slug/edit', async (req, res) => {
-    try {
-        const { title, content } = req.body;
-        const slug = generateSlug(title);
-        
-        await Blog.findOneAndUpdate(
-            { slug: req.params.slug },
-            { title, slug, content }
-        );
-        
-        res.redirect(`/blog/${slug}`);
-    } catch (err) {
-        console.error('Error updating post:', err);
-        res.status(500).render('404', { message: 'Error updating post', posts: [] });
-    }
-});
-
-app.post('/blog/:slug/delete', async (req, res) => {
-    try {
-        await Blog.findOneAndDelete({ slug: req.params.slug });
-        res.redirect('/');
-    } catch (err) {
-        console.error('Error deleting post:', err);
-        res.status(500).render('404', { message: 'Error deleting post', posts: [] });
-    }
-});
-
+// 404 handler
 app.use((req, res) => {
     res.status(404).render('404', { message: 'Post or Page not found', posts: [] });
 });

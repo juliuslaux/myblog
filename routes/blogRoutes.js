@@ -13,29 +13,7 @@ function generateSlug(text) {
         .trim();
 }
 
-// Routes 123
-router.get('/', async (req, res) => {
-    try {
-        // Debug authentication status
-        console.log('/ route - Auth status:', req.isAuthenticated(), req.user ? req.user.username : 'no user');
-
-        const posts = await Blog.find().sort({ date: -1 });
-        res.render('index', { 
-            posts, 
-            user: req.user,
-            isAuthenticated: req.isAuthenticated()
-        });
-    } catch (err) {
-        console.error('Error fetching posts:', err);
-        res.status(500).render('404', { 
-            message: 'Error fetching posts', 
-            posts: [], 
-            user: req.user,
-            isAuthenticated: req.isAuthenticated()
-        });
-    }
-});
-
+// Create post page
 router.get('/create', isAuthenticated, (req, res) => {
     res.render('create', { title: 'Create Post' });
 });

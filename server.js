@@ -8,6 +8,7 @@ const passport = require('passport');
 const LocalStrategy = require('passport-local').Strategy;
 const User = require('./models/User');
 const bcrypt = require('bcrypt');
+const Blog = require('./models/Blog');
 
 // Optimized for Vercel deployment - Fixed MongoDB connection
 
@@ -74,38 +75,6 @@ app.use(express.json());
 // Basic routes that don't require DB
 app.get('/health', (req, res) => {
     res.status(200).json({ status: 'ok' });
-});
-
-app.get('/', async (req, res) => {
-    try {
-        // Generate debug info
-        const debug = {
-            sessionID: req.sessionID || 'no-session',
-            authenticated: req.isAuthenticated(),
-            user: req.user ? req.user.username : 'none'
-        };
-        
-        res.render('index', { 
-            posts: [], 
-            user: req.user,
-            isAuthenticated: req.isAuthenticated(),
-            debug: debug
-        });
-    } catch (error) {
-        console.error('Error:', error);
-        const debug = {
-            sessionID: req.sessionID || 'no-session',
-            authenticated: false,
-            user: 'none'
-        };
-        res.status(500).render('404', { 
-            message: 'Error loading home page', 
-            posts: [],
-            user: null,
-            isAuthenticated: false,
-            debug: debug
-        });
-    }
 });
 
 // Session configuration for Vercel
@@ -197,6 +166,30 @@ app.use((req, res, next) => {
     next();
 });
 
+// Root route - moved here after all middleware
+app.get('/', async (req, res) => {
+    try {
+        // Ensure we're connected to the database
+        await connectToDatabase();
+        
+        // Get all posts
+        const posts = await Blog.find().sort({ date: -1 });
+        
+        // Render the index view with posts and auth info
+        res.render('index', { 
+            title: 'Home',
+            posts: posts
+        });
+    } catch (error) {
+        console.error('Error in root route:', error);
+        res.status(500).render('404', { 
+            title: 'Error',
+            message: 'Error loading home page', 
+            posts: []
+        });
+    }
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
     console.error('Error:', err);
@@ -215,7 +208,11 @@ app.use('/', blogRoutes);
 
 // 404 handler
 app.use((req, res) => {
-    res.status(404).json({ error: 'Not Found' });
+    res.status(404).render('404', { 
+        title: 'Not Found',
+        message: 'The page you were looking for does not exist',
+        posts: []
+    });
 });
 
 // Only start the server if we're not in a serverless environment
